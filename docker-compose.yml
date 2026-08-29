@@ -1,0 +1,57 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: armada_dev
+      POSTGRES_PASSWORD: armada_dev_pass
+      POSTGRES_DB: armada_control
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U armada_dev -d armada_control"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./server
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://armada_dev:armada_dev_pass@db:5432/armada_control
+      JWT_SECRET: dev-secret-change-me-in-production
+      CLIENT_ORIGIN: http://localhost:5174
+      PORT: "4001"
+    ports:
+      - "4001:4001"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: .
+    restart: unless-stopped
+    environment:
+      VITE_API_TARGET: http://backend:4001
+    ports:
+      - "5174:5174"
+    depends_on:
+      - backend
+
+  frontend-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    depends_on:
+      backend:
+        condition: service_started
+
+volumes:
+  pgdata_dev:
